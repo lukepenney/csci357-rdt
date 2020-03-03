@@ -1,3 +1,4 @@
+# https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
 from network import Protocol, StreamSocket
 
 # Reserved protocol number for experiments; see RFC 3692
@@ -5,61 +6,62 @@ IPPROTO_RDT = 0xfe
 
 
 class RDTSocket(StreamSocket):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Other initialization here
 
-    def bind(self, port):
-		"""
-		https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
-		TODO: remove comments and see comments in superclass
-		Makes sure this port is not in use and attaches it to this socket
-		"""
-        pass
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# Other initialization here
+		self.bound_port = -1
+		self.is_listening = False
+		self.is_connected = False
 
-    def listen(self):
-		"""
-		Tells this socket that it will be listening for connections
-		"""
-        pass
+	def bind(self, port):
+		if self.bound_port != -1:
+			raise super().AlreadyConnected
 
-    def accept(self):
-		"""
-		Accepts a connection from some other socket (blocks until other socket tries to connect?)
-		"""
-        pass
+		if port in self.proto.ports_in_use:
+			raise super().AddressInUse
 
-    def connect(self, addr):
-		"""
-		Initiates connection to some other socket at this address
-		"""
-        pass
+		self.bound_port = port
+		self.proto.ports_in_use.add(port)
 
-    def send(self, data):
-		"""
-		Sends data to the socket this one is connected to
-		"""
-        pass  # probably will call: Protocol.output(seg, host); see also: StreamSocket.recv(self, n=None)
+	def listen(self):
+		if self.bound_port == -1:
+			raise super().NotBound
+
+		if self.is_connected:
+			raise super().AlreadyConnected
+
+		self.is_listening = True
+
+		# TODO: "begins to listen for and queue incoming connections"
+
+	def accept(self):
+		if not self.is_listening:
+			raise StreamSocket.NotListening
+
+		pass
+
+	def connect(self, addr):
+		if self.bound_port == -1:
+			raise super().NotBound
+
+		pass
+
+	def send(self, data):
+		if self.bound_port == -1:
+			raise super().NotBound
+
+		pass  # probably will call: Protocol.output(seg, host); see also: StreamSocket.recv(self, n=None)
 
 
 class RDTProtocol(Protocol):
-    PROTO_ID = IPPROTO_RDT
-    SOCKET_CLS = RDTSocket
+	PROTO_ID = IPPROTO_RDT
+	SOCKET_CLS = RDTSocket
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Other initialization here
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# Other initialization here
+		self.ports_in_use = set()
 
-    def input(self, seg, rhost):
-		"""
-		Handles an incoming segment
-
-		This method is called by the network-layer thread when a segment is
-		received for this protocol, providing the segment data (bytes) and
-		network-layer address of the source host.
-
-		It should handle any protocol-level receive behavior such as
-		demultiplexing and error detection, then pass the segment and source
-		address to the correct socket for handling.
-		"""
-        pass  # probably will call: Protocol.output(self, seg, dst)
+	def input(self, seg, rhost):
+	   pass  # probably will call: Protocol.output(self, seg, dst)
