@@ -11,6 +11,7 @@ class RDTSocket(StreamSocket):
 
     def bind(self, port):
 		"""
+		https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
 		TODO: remove comments and see comments in superclass
 		Makes sure this port is not in use and attaches it to this socket
 		"""
