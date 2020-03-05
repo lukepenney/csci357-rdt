@@ -74,6 +74,9 @@ class RDTSocket(StreamSocket):
 		If this is called on a socket which is not listening, the method should
 		raise StreamSocket.NotListening.
 		"""
+		if self.bound_port == -1:
+			raise StreamSocket.NotBound
+
 		if not self.is_listening:
 			raise StreamSocket.NotListening
 
@@ -85,7 +88,10 @@ class RDTSocket(StreamSocket):
 		connected_socket.remote_IP = new_connection[0]
 		connected_socket.remote_port = new_connection[1]
 
-		return (connected_socket, (new_connection[0], new_connection[1]))
+		socket_identifier = (connected_socket.bound_port, (connected_socket.remote_IP, connected_socket.remote_port))
+		self.proto.connections[socket_identifier] = connected_socket
+
+		return (connected_socket, (connected_socket.remote_IP, connected_socket.remote_port))
 
 	def connect(self, addr):
 		"""
@@ -196,12 +202,9 @@ class RDTProtocol(Protocol):
 		if not local_port in self.ports_in_use:
 			return # TODO: later: error handling? Maybe I can just drop the packet
 
-		print((local_port, (rhost, remote_port)))  # TODO: fix the thing
 		right_socket = self.connections.get((local_port, (rhost, remote_port)))
-		print(right_socket)
 
 		if not right_socket == None:
-			print('TODO: Why isn\'t the program getting here???')
 			right_socket.deliver(data)
 		else:
 			right_socket = self.listening_sockets[local_port]
