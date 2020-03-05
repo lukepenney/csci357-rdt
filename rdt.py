@@ -127,8 +127,8 @@ class RDTSocket(StreamSocket):
 		socket_identifier = (self.bound_port, (self.remote_IP, self.remote_port))
 		self.proto.connections[socket_identifier] = self
 
-		self.send(b'hai fren!!1')  # just send some initial stuff to start the connection
-		# TODO: later: anything else to make the connection?
+		# just send some initial stuff to start the connection on the other side
+		self.send(b'hai fren!!1')
 
 	def send(self, data):
 		"""
@@ -147,7 +147,7 @@ class RDTSocket(StreamSocket):
 		if not self.is_connected:
 			raise super().NotConnected
 
-		# TODO: later: will also need to set timers, etc
+		# TODO: will also need to set timers, etc
 
 		local_port_string = RDTSocket.port_string(self.bound_port)
 		remote_port_string = RDTSocket.port_string(self.remote_port)
@@ -155,15 +155,24 @@ class RDTSocket(StreamSocket):
 		headers = (local_port_string + remote_port_string).encode('utf-8')
 		segment = headers + data
 
+		checksum = RDTSocket.checksum(segment)
+		segment = checksum + segment
+
 		super().output(segment, self.remote_IP)
 
-	# Converts an integer port number to a string of length 5
 	@staticmethod
 	def port_string(port):
+		"""
+		Converts an integer port number to a string of length 5
+		"""
 		port_str = str(port)
 		while len(port_str) < 5:
 			port_str = "0" + port_str
 		return port_str
+
+	@staticmethod
+	def checksum(segment):
+		return bytes([sum(segment) % 256])
 
 class RDTProtocol(Protocol):
 	PROTO_ID = IPPROTO_RDT
@@ -191,16 +200,16 @@ class RDTProtocol(Protocol):
 		address to the correct socket for handling.
 		"""
 
-		# TODO: later: may be useful:
-		# https://en.wikipedia.org/wiki/User_Datagram_Protocol#UDP_datagram_structure
-		# https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure
+		# drop currupt packets
+		if not RDTProtocol.valid_checksum(seg):
+			return
 
-		remote_port = int(seg[:5])
-		local_port = int(seg[5:10])
-		data = seg[10:]
+		remote_port = int(seg[1:6])
+		local_port = int(seg[6:11])
+		data = seg[11:]
 
 		if not local_port in self.ports_in_use:
-			return # TODO: later: error handling? Maybe I can just drop the packet
+			return
 
 		right_socket = self.connections.get((local_port, (rhost, remote_port)))
 
@@ -211,7 +220,14 @@ class RDTProtocol(Protocol):
 			# TODO: right_socket should never be None here, but what if it is?
 			right_socket.waiting_connections.put((rhost, remote_port))
 			# TODO: If I'm not storing the data anywhere, I'm dropping the packet. Is that
-			# what I should be doing?
-		
-		# TODO: later: checksum to find errors
-		# TODO: later: probably will need to collaborate with send() to do things like timers and resending, etc
+			# what I should be doing? - well, that's how it's supposed to be based on send()
+
+		# TODO: will need to acknowledge packets
+
+	@staticmethod	
+	def valid_checksum(rdt_segment):
+		"""
+		Checks whether the checksum of this rdt segment is valid
+		"""
+		return rdt_segment[0:1] == RDTSocket.checksum(rdt_segment[1:])
+
