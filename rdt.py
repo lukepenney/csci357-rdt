@@ -4,6 +4,7 @@
 from network import Protocol, StreamSocket
 from queue import Queue
 
+
 # Reserved protocol number for experiments; see RFC 3692
 IPPROTO_RDT = 0xfe
 
@@ -59,7 +60,7 @@ class RDTSocket(StreamSocket):
 
 		self.is_listening = True
 
-		# TODO: later: anything else to do for this?
+		self.proto.listening_sockets[self.bound_port] = self
 
 	def accept(self):
 		"""
@@ -76,10 +77,7 @@ class RDTSocket(StreamSocket):
 		if not self.is_listening:
 			raise StreamSocket.NotListening
 
-		if self.waiting_connections.empty:
-			return (self, ('', -1))  # TODO: block
-
-		new_connection = self.waiting_connections.dequeue()
+		new_connection = self.waiting_connections.get()  # Note: blocks if empty
 
 		connected_socket = self.proto.socket()
 		connected_socket.bound_port = self.bound_port
@@ -87,7 +85,8 @@ class RDTSocket(StreamSocket):
 		connected_socket.remote_IP = new_connection[0]
 		connected_socket.remote_port = new_connection[1]
 
-		return (connnected_socket, (new_connection[0], new_connection[1]))
+		print(new_connection)
+		return (connected_socket, (new_connection[0], new_connection[1]))
 
 	def connect(self, addr):
 		"""
@@ -120,6 +119,7 @@ class RDTSocket(StreamSocket):
 		self.remote_IP = addr[0]
 		self.remote_port = addr[1]
 
+		self.send(b'hai fren!!1')  # just send some initial stuff to start the connection
 		# TODO: later: anything else to make the connection?
 
 	def send(self, data):
@@ -141,11 +141,21 @@ class RDTSocket(StreamSocket):
 
 		# TODO: later: will also need to set timers, etc
 
-		headers = b'' # TODO: What should headers be?
+		local_port_string = RDTSocket.port_string(self.bound_port)
+		remote_port_string = RDTSocket.port_string(self.remote_port)
+
+		headers = (local_port_string + remote_port_string).encode('utf-8')
 		segment = headers + data
 
-		super().output(segment, (self.remote_IP, self.remote_port))
+		super().output(segment, self.remote_IP)
 
+	# Converts an integer port number to a string of length 5
+	@staticmethod
+	def port_string(port):
+		port_str = str(port)
+		while len(port_str) < 5:
+			port_str = "0" + port_str
+		return port_str
 
 class RDTProtocol(Protocol):
 	PROTO_ID = IPPROTO_RDT
@@ -156,6 +166,7 @@ class RDTProtocol(Protocol):
 		super().__init__(*args, **kwargs)
 		# Other initialization here
 		self.ports_in_use = set()
+		self.listening_sockets = dict()  # maps port # to the socket listening on that port
 		# self.connections maps (local_port, (remote_IP, remote_port)) to socket
 		self.connections = dict()
 
@@ -176,10 +187,23 @@ class RDTProtocol(Protocol):
 		# https://en.wikipedia.org/wiki/User_Datagram_Protocol#UDP_datagram_structure
 		# https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure
 
-		# TODO:
-		# get headers and data from seg; use headers to identify local and remote port #'s
-		# use port #'s and rhost - which is remote_IP - to identify the right socket
-		# deliver data, using right_socket.deliver(data)
-		# - if the socket is listening, will need to queue the connection instead
-		# - probably will need to collaborat with send() to do things like timers and resending, etc
-		pass
+		remote_port = int(seg[:5])
+		local_port = int(seg[5:10])
+		data = seg[10:]
+
+		if not local_port in self.ports_in_use:
+			return # TODO: later: error handling? Maybe I can just drop the packet
+
+		right_socket = self.connections.get((local_port, (rhost, remote_port)))
+
+		if not right_socket == None:
+			right_socket.deliver(data)
+		else:
+			right_socket = self.listening_sockets[local_port]
+			# TODO: right_socket should never be None here, but what if it is?
+			right_socket.waiting_connections.put((rhost, remote_port))
+			# TODO: If I'm not storing the data anywhere, I'm dropping the packet. Is that
+			# what I should be doing?
+		
+		# TODO: later: checksum to find errors
+		# TODO: later: probably will need to collaborate with send() to do things like timers and resending, etc
