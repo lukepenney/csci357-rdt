@@ -2,6 +2,7 @@
 # https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
 
 from network import Protocol, StreamSocket
+from queue import Queue
 
 # Reserved protocol number for experiments; see RFC 3692
 IPPROTO_RDT = 0xfe
@@ -13,11 +14,16 @@ class RDTSocket(StreamSocket):
 		"""Initializes a new stream socket"""
 		super().__init__(*args, **kwargs)
 		# Other initialization here
+		
 		self.bound_port = -1
-		self.is_listening = False
+		
 		self.is_connected = False
+		# only used by connected sockets
 		self.remote_IP = ''
 		self.remote_port = -1
+
+		self.is_listening = False
+		self.waiting_connections = Queue()  # only used by listening socket
 
 	def bind(self, port):
 		"""
@@ -70,13 +76,18 @@ class RDTSocket(StreamSocket):
 		if not self.is_listening:
 			raise StreamSocket.NotListening
 
-		# TODO:
-		# check connection queue
-		# if no connections waiting, block
-		# if connection, remove from queue and attach to new socket; return
-		#  that socket with (remote_addr, remote_port)
-		# (note: this socket keeps listening afterwards)
-		return (None, ('', -1))
+		if self.waiting_connections.empty:
+			return (self, ('', -1))  # TODO: block
+
+		new_connection = self.waiting_connections.dequeue()
+
+		connected_socket = self.proto.socket()
+		connected_socket.bound_port = self.bound_port
+		connected_socket.is_connected = True
+		connected_socket.remote_IP = new_connection[0]
+		connected_socket.remote_port = new_connection[1]
+
+		return (connnected_socket, (new_connection[0], new_connection[1]))
 
 	def connect(self, addr):
 		"""
@@ -130,7 +141,7 @@ class RDTSocket(StreamSocket):
 
 		# TODO: later: will also need to set timers, etc
 
-		headers = b'' # TODO: later: What should headers be?
+		headers = b'' # TODO: What should headers be?
 		segment = headers + data
 
 		super().output(segment, (self.remote_IP, self.remote_port))
