@@ -3,6 +3,7 @@
 
 from network import Protocol, StreamSocket
 from queue import Queue
+from time import sleep
 
 
 # Reserved protocol number for experiments; see RFC 3692
@@ -25,6 +26,8 @@ class RDTSocket(StreamSocket):
 
 		self.is_listening = False
 		self.waiting_connections = Queue()  # only used by listening socket
+
+		self.acked = False  # whether the last sent packet has been acknowledged by the other side
 
 	def bind(self, port):
 		"""
@@ -127,8 +130,8 @@ class RDTSocket(StreamSocket):
 		socket_identifier = (self.bound_port, (self.remote_IP, self.remote_port))
 		self.proto.connections[socket_identifier] = self
 
-		# just send some initial stuff to start the connection on the other side
-		self.send(b'hai fren!!1')
+		# send initial message to start the connection on the other side
+		self.send(b'SYN')
 
 	def send(self, data):
 		"""
@@ -147,8 +150,6 @@ class RDTSocket(StreamSocket):
 		if not self.is_connected:
 			raise super().NotConnected
 
-		# TODO: will also need to set timers, etc
-
 		local_port_string = RDTSocket.port_string(self.bound_port)
 		remote_port_string = RDTSocket.port_string(self.remote_port)
 
@@ -158,7 +159,14 @@ class RDTSocket(StreamSocket):
 		checksum = RDTSocket.checksum(segment)
 		segment = checksum + segment
 
-		super().output(segment, self.remote_IP)
+		self.acked = False
+		counter = 0
+		while self.acked == False:
+			if counter == 3:
+				return  # no response is likely to come; time to give up
+			counter += 1
+			super().output(segment, self.remote_IP)
+			sleep(0.001)
 
 	@staticmethod
 	def port_string(port):
@@ -213,16 +221,19 @@ class RDTProtocol(Protocol):
 
 		right_socket = self.connections.get((local_port, (rhost, remote_port)))
 
-		if not right_socket == None:
-			right_socket.deliver(data)
-		else:
+		if right_socket == None:
 			right_socket = self.listening_sockets[local_port]
-			# TODO: right_socket should never be None here, but what if it is?
 			right_socket.waiting_connections.put((rhost, remote_port))
-			# TODO: If I'm not storing the data anywhere, I'm dropping the packet. Is that
-			# what I should be doing? - well, that's how it's supposed to be based on send()
-
-		# TODO: will need to acknowledge packets
+			if data != b'SYN':
+				pass  # TODO: error handling?
+		else:
+			if data == b'ACK':
+				right_socket.acked = True
+			elif data == b'SYN':
+				pass  # This is *probably* a duplicate packet that's fine to ignore
+			else:
+				right_socket.deliver(data)
+				right_socket.send(b'ACK')
 
 	@staticmethod	
 	def valid_checksum(rdt_segment):
