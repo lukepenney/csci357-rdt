@@ -85,7 +85,6 @@ class RDTSocket(StreamSocket):
 		connected_socket.remote_IP = new_connection[0]
 		connected_socket.remote_port = new_connection[1]
 
-		print(new_connection)
 		return (connected_socket, (new_connection[0], new_connection[1]))
 
 	def connect(self, addr):
@@ -118,6 +117,9 @@ class RDTSocket(StreamSocket):
 
 		self.remote_IP = addr[0]
 		self.remote_port = addr[1]
+
+		socket_identifier = (self.bound_port, (self.remote_IP, self.remote_port))
+		self.proto.connections[socket_identifier] = self
 
 		self.send(b'hai fren!!1')  # just send some initial stuff to start the connection
 		# TODO: later: anything else to make the connection?
@@ -194,9 +196,12 @@ class RDTProtocol(Protocol):
 		if not local_port in self.ports_in_use:
 			return # TODO: later: error handling? Maybe I can just drop the packet
 
+		print((local_port, (rhost, remote_port)))  # TODO: fix the thing
 		right_socket = self.connections.get((local_port, (rhost, remote_port)))
+		print(right_socket)
 
 		if not right_socket == None:
+			print('TODO: Why isn\'t the program getting here???')
 			right_socket.deliver(data)
 		else:
 			right_socket = self.listening_sockets[local_port]
