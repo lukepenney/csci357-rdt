@@ -2,6 +2,7 @@
 # https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
 # TODO: having the SYN and ACK information be pseudo-payload is problematic;
 #       I should probably just do a flag with S/A or some such
+# TODO: What if ACK is corrupted? - this may be why the tests are failing
 
 from network import Protocol, StreamSocket
 from queue import Queue
@@ -152,14 +153,6 @@ class RDTSocket(StreamSocket):
 		if not self.is_connected:
 			raise super().NotConnected
 
-		# avoid sending new information until the last information has been acknowledged
-		counter = 0
-		while not self.acked:
-			if counter == 3:
-				break  # no response is likely to come; time to give up
-			counter += 1
-			sleep(0.001)
-
 		local_port_string = RDTSocket.port_string(self.bound_port)
 		remote_port_string = RDTSocket.port_string(self.remote_port)
 
@@ -173,6 +166,7 @@ class RDTSocket(StreamSocket):
 		counter = 0
 		while not self.acked:
 			if counter == 3:
+				self.acked = True
 				return  # no response is likely to come; time to give up
 			counter += 1
 			super().output(segment, self.remote_IP)
