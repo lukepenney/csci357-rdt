@@ -1,5 +1,7 @@
 # The URL for this assignment is:
 # https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
+# TODO: having the SYN and ACK information be pseudo-payload is problematic;
+#       I should probably just do a flag with S/A or some such
 
 from network import Protocol, StreamSocket
 from queue import Queue
@@ -27,7 +29,7 @@ class RDTSocket(StreamSocket):
 		self.is_listening = False
 		self.waiting_connections = Queue()  # only used by listening socket
 
-		self.acked = False  # whether the last sent packet has been acknowledged by the other side
+		self.acked = True  # whether the last sent packet has been acknowledged by the other side
 
 	def bind(self, port):
 		"""
@@ -150,6 +152,14 @@ class RDTSocket(StreamSocket):
 		if not self.is_connected:
 			raise super().NotConnected
 
+		# avoid sending new information until the last information has been acknowledged
+		counter = 0
+		while not self.acked:
+			if counter == 3:
+				break  # no response is likely to come; time to give up
+			counter += 1
+			sleep(0.001)
+
 		local_port_string = RDTSocket.port_string(self.bound_port)
 		remote_port_string = RDTSocket.port_string(self.remote_port)
 
@@ -161,7 +171,7 @@ class RDTSocket(StreamSocket):
 
 		self.acked = False
 		counter = 0
-		while self.acked == False:
+		while not self.acked:
 			if counter == 3:
 				return  # no response is likely to come; time to give up
 			counter += 1
@@ -220,6 +230,7 @@ class RDTProtocol(Protocol):
 			return
 
 		right_socket = self.connections.get((local_port, (rhost, remote_port)))
+		#print(self.host.ip + ' received ' + str((local_port, (rhost, remote_port))) + ' containing ' + str(data))
 
 		if right_socket == None:
 			right_socket = self.listening_sockets[local_port]
