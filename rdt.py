@@ -1,8 +1,6 @@
 # The URL for this assignment is:
 # https://cs.wheaton.edu/~devinpohly/csci357-s20/project-rdt.pdf
-# TODO: having the SYN and ACK information be pseudo-payload is problematic;
-#       I should probably just do a flag with S/A or some such
-# TODO: What if ACK is corrupted? - this may be why the tests are failing
+
 
 from network import Protocol, StreamSocket
 from queue import Queue
@@ -135,6 +133,9 @@ class RDTSocket(StreamSocket):
 
 		# send initial message to start the connection on the other side
 		self.send(b'SYN')
+		
+		# TODO: having the SYN and ACK information be a pseudo-payload is
+		# problematic; I should probably just do a flag with S/A or some such
 
 	def send(self, data):
 		"""
