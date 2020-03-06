@@ -165,7 +165,7 @@ class RDTSocket(StreamSocket):
 		self.acked = False
 		counter = 0
 		while not self.acked:
-			if counter == 3:
+			if counter == 10:
 				self.acked = True
 				return  # no response is likely to come; time to give up
 			counter += 1
